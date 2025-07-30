@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PDF RAG Assistant
 
-## Getting Started
+A modern Next.js 15 application that allows you to upload PDF documents and ask questions using AI-powered Retrieval Augmented Generation (RAG).
 
-First, run the development server:
+## 🚀 Features
+
+- **PDF Upload**: Upload PDF documents to ChromaDB vector database
+- **AI Q&A**: Ask questions about your uploaded documents
+- **Modern UI**: Clean, responsive design with dark mode support
+- **Real-time Processing**: Instant answers using OpenAI's GPT models
+- **Vector Search**: Semantic search using embeddings
+
+## 🛠️ Setup Instructions
+
+### 1. Install Dependencies
+
+```bash
+npm install
+# or
+bun install
+```
+
+### 2. Get Free OpenAI API Key
+
+1. **Sign up for free**: Go to [OpenAI Platform](https://platform.openai.com/)
+2. **Get $5 free credits**: New accounts get $5 in free API credits
+3. **Create API key**:
+   - Go to [API Keys page](https://platform.openai.com/api-keys)
+   - Click "Create new secret key"
+   - Copy the key (starts with `sk-`)
+
+### 3. Configure Environment Variables
+
+Create a `.env.local` file in the root directory:
+
+```bash
+# Create the environment file
+touch .env.local
+```
+
+Add your OpenAI API key to `.env.local`:
+
+```env
+# OpenAI API Configuration
+OPENAI_API_KEY=your_actual_api_key_here
+
+# Optional: ChromaDB Configuration
+# CHROMA_HOST=localhost
+# CHROMA_PORT=8000
+```
+
+### 4. Start Development Server
 
 ```bash
 npm run dev
 # or
-yarn dev
-# or
-pnpm dev
-# or
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to see the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📖 How to Use
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Upload PDF**: Click "Choose File" and select a PDF document
+2. **Process**: Click "Upload to ChromaDB" to process and store the document
+3. **Ask Questions**: Type your question in the text area
+4. **Get Answers**: Click "Ask Question" to receive AI-powered answers
 
-## Learn More
+## 🏗️ Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+- **Frontend**: Next.js 15, React 19, TypeScript
+- **Styling**: Tailwind CSS v4
+- **AI**: OpenAI GPT-4o-mini, text-embedding-3-small
+- **Vector Database**: ChromaDB
+- **PDF Processing**: pdf-parse
+- **File Upload**: Multer
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🔧 API Endpoints
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `POST /api/upload` - Upload and process PDF files
+- `POST /api/query` - Ask questions about uploaded documents
 
-## Deploy on Vercel
+## 💡 Tips
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Free Credits**: The $5 free OpenAI credits can handle thousands of queries
+- **PDF Size**: Larger PDFs may take longer to process
+- **Question Quality**: Be specific in your questions for better answers
+- **Multiple Documents**: You can upload multiple PDFs for comprehensive answers
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🚀 Deployment
+
+The easiest way to deploy is using [Vercel](https://vercel.com):
+
+1. Push your code to GitHub
+2. Connect your repository to Vercel
+3. Add your `OPENAI_API_KEY` to Vercel environment variables
+4. Deploy!
+
+## 📝 License
+
+This project is open source and available under the [MIT License](LICENSE).
