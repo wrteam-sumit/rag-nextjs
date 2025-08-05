@@ -49,6 +49,13 @@ export default function Home() {
   const [documentsCount, setDocumentsCount] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isDeletingDocuments, setIsDeletingDocuments] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showDocuments, setShowDocuments] = useState(false);
+  const [documents, setDocuments] = useState<DocumentResponse[]>([]);
+  const [canRegenerate, setCanRegenerate] = useState(false);
+  const [lastUserMessage, setLastUserMessage] = useState("");
+  const [isClient, setIsClient] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,6 +66,45 @@ export default function Home() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Set client flag to prevent hydration mismatches
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + N: New chat
+      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        e.preventDefault();
+        createNewChat();
+      }
+
+      // Ctrl/Cmd + K: Focus input
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        const textarea = document.querySelector(
+          "textarea"
+        ) as HTMLTextAreaElement;
+        textarea?.focus();
+      }
+
+      // Ctrl/Cmd + U: Upload file
+      if ((e.ctrlKey || e.metaKey) && e.key === "u") {
+        e.preventDefault();
+        fileInputRef.current?.click();
+      }
+
+      // Escape: Clear input
+      if (e.key === "Escape") {
+        setInputValue("");
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Load chat sessions from database on mount
   useEffect(() => {
@@ -228,7 +274,8 @@ export default function Home() {
       const response = await fetch("/api/documents");
       if (response.ok) {
         const data = await response.json();
-        setDocumentsCount(data.total || 0);
+        setDocumentsCount(data.length || 0);
+        setDocuments(data);
       }
     } catch (error) {
       console.error("Error fetching documents count:", error);
@@ -300,22 +347,191 @@ export default function Home() {
     }
   };
 
+  const deleteDocument = async (documentId: string) => {
+    if (!confirm("Are you sure you want to delete this document?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/documents/${documentId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setDocuments(documents.filter((doc) => doc.document_id !== documentId));
+        setDocumentsCount(documentsCount - 1);
+        setUploadMessage("✅ Document deleted successfully!");
+        setTimeout(() => setUploadMessage(""), 3000);
+      } else {
+        setUploadMessage("❌ Failed to delete document");
+        setTimeout(() => setUploadMessage(""), 3000);
+      }
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      setUploadMessage("❌ Error deleting document");
+      setTimeout(() => setUploadMessage(""), 3000);
+    }
+  };
+
+  const exportChat = () => {
+    const chatTitle =
+      chatSessions.find((c) => c.id === currentChatId)?.title || "Chat";
+    const exportData = {
+      title: chatTitle,
+      timestamp: new Date().toISOString(),
+      messages: messages.map((msg) => ({
+        type: msg.type,
+        content: msg.content,
+        timestamp: msg.timestamp.toISOString(),
+        sources: msg.sources,
+        metadata: msg.metadata,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${chatTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_${
+      new Date().toISOString().split("T")[0]
+    }.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const regenerateResponse = async () => {
+    if (!lastUserMessage || isLoading) return;
+
+    setIsLoading(true);
+    setCanRegenerate(false);
+
+    // Remove the last assistant message if it exists
+    const messagesWithoutLastAssistant = messages.filter((msg, index) => {
+      if (index === messages.length - 1 && msg.type === "assistant") {
+        return false;
+      }
+      return true;
+    });
+
+    updateCurrentChat(messagesWithoutLastAssistant);
+
+    try {
+      const result = await api.queryDocuments(lastUserMessage, currentChatId);
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: "assistant",
+        content: result.answer,
+        timestamp: new Date(),
+        sources: result.sources,
+        metadata: {
+          searchMethod: result.search_method,
+          aiMethod: result.ai_method,
+          fallbackUsed: result.fallback_used,
+          documentsFound: result.documents_found,
+        },
+      };
+
+      // Save assistant message to backend
+      try {
+        await api.createMessage(
+          currentChatId,
+          "assistant",
+          result.answer,
+          result.sources,
+          {
+            searchMethod: result.search_method,
+            aiMethod: result.ai_method,
+            fallbackUsed: result.fallback_used,
+            documentsFound: result.documents_found,
+          }
+        );
+      } catch (error) {
+        console.error("Failed to save assistant message:", error);
+      }
+
+      const updatedMessages = [
+        ...messagesWithoutLastAssistant,
+        assistantMessage,
+      ];
+      updateCurrentChat(updatedMessages);
+      setCanRegenerate(true);
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: "assistant",
+        content: `❌ Error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }\n\nPlease try again or check if you have uploaded any documents. You can also try:\n• Uploading a different document\n• Rephrasing your question\n• Checking your internet connection`,
+        timestamp: new Date(),
+      };
+
+      // Save error message to backend
+      try {
+        await api.createMessage(
+          currentChatId,
+          "assistant",
+          errorMessage.content
+        );
+      } catch (saveError) {
+        console.error("Failed to save error message:", saveError);
+      }
+
+      const updatedMessages = [...messagesWithoutLastAssistant, errorMessage];
+      updateCurrentChat(updatedMessages);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Check file size
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadMessage("❌ File too large. Maximum size is 10MB.");
+      setTimeout(() => setUploadMessage(""), 5000);
+      return;
+    }
+
+    // Check file type
+    const allowedTypes = [".pdf", ".docx", ".doc", ".txt", ".md", ".rtf"];
+    const fileExtension = "." + file.name.split(".").pop()?.toLowerCase();
+    if (!allowedTypes.includes(fileExtension)) {
+      setUploadMessage(
+        "❌ Unsupported file type. Please upload PDF, DOCX, DOC, TXT, MD, or RTF files."
+      );
+      setTimeout(() => setUploadMessage(""), 5000);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
     setUploadMessage("📤 Uploading document...");
+
+    // Simulate progress for better UX
+    const progressInterval = setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev >= 90) return prev;
+        return prev + Math.random() * 10;
+      });
+    }, 200);
 
     try {
       const result = await api.uploadDocument(file);
-
+      clearInterval(progressInterval);
+      setUploadProgress(100);
       setUploadMessage(
-        `✅ Document uploaded successfully! (${(file.size / 1024).toFixed(
-          1
-        )} KB)`
+        `✅ Successfully uploaded ${result.filename} (${result.text_length} characters extracted)`
       );
+
       fetchDocumentsCount();
 
       // Add system message about upload
@@ -333,13 +549,23 @@ export default function Home() {
 
       const newMessages = [...messages, uploadMessage];
       updateCurrentChat(newMessages);
+
+      setTimeout(() => {
+        setUploadMessage("");
+        setUploadProgress(0);
+        setIsUploading(false);
+      }, 3000);
     } catch (error) {
+      clearInterval(progressInterval);
+      setUploadProgress(0);
+      setIsUploading(false);
       console.error("Upload error:", error);
       setUploadMessage(
         `❌ Upload failed: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
+      setTimeout(() => setUploadMessage(""), 5000);
     }
 
     // Clear the file input
@@ -370,6 +596,8 @@ export default function Home() {
     updateCurrentChat(newMessages);
     setInputValue("");
     setIsLoading(true);
+    setCanRegenerate(false);
+    setLastUserMessage(inputValue);
 
     // Update chat title based on first user message
     if (messages.length === 1) {
@@ -417,13 +645,14 @@ export default function Home() {
 
       const updatedMessages = [...newMessages, assistantMessage];
       updateCurrentChat(updatedMessages);
+      setCanRegenerate(true);
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: "assistant",
         content: `❌ Error: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`,
+        }\n\nPlease try again or check if you have uploaded any documents. You can also try:\n• Uploading a different document\n• Rephrasing your question\n• Checking your internet connection`,
         timestamp: new Date(),
       };
 
@@ -463,7 +692,11 @@ export default function Home() {
     if (days === 0) return "Today";
     if (days === 1) return "Yesterday";
     if (days < 7) return `${days} days ago`;
-    return date.toLocaleDateString();
+    // Use a consistent date format instead of locale-dependent toLocaleDateString
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const day = date.getDate().toString().padStart(2, "0");
+    return `${month}/${day}/${year}`;
   };
 
   return (
@@ -490,10 +723,10 @@ export default function Home() {
           {chatSessions.map((chat) => (
             <div
               key={chat.id}
-              className={`group relative p-3 rounded-lg cursor-pointer mb-2 transition-colors ${
+              className={`group relative p-3 rounded-lg cursor-pointer mb-2 transition-all duration-200 ${
                 currentChatId === chat.id
-                  ? "bg-gray-700 border border-gray-600"
-                  : "hover:bg-gray-700"
+                  ? "bg-gray-700 border border-gray-600 shadow-md"
+                  : "hover:bg-gray-700 hover:shadow-sm"
               }`}
               onClick={() => switchChat(chat.id)}
             >
@@ -520,11 +753,75 @@ export default function Home() {
           ))}
         </div>
 
+        {/* Documents Panel */}
+        {showDocuments && documents.length > 0 && (
+          <div className="border-t border-gray-700 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-200">Documents</h3>
+              <button
+                onClick={() => setShowDocuments(false)}
+                className="text-gray-400 hover:text-gray-300 text-xs cursor-pointer"
+              >
+                Hide
+              </button>
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {documents.map((doc) => (
+                <div
+                  key={doc.document_id}
+                  className="bg-gray-700 rounded-lg p-3 text-xs"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-gray-200 font-medium truncate">
+                        {doc.filename}
+                      </p>
+                      <p className="text-gray-400 mt-1">
+                        {doc.file_type.toUpperCase()} •{" "}
+                        {(doc.file_size / 1024).toFixed(1)} KB
+                      </p>
+                      {doc.text_length && (
+                        <p className="text-gray-500 mt-1">
+                          {doc.text_length.toLocaleString()} characters
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => deleteDocument(doc.document_id)}
+                      className="ml-2 text-red-400 hover:text-red-300 text-xs cursor-pointer"
+                      title="Delete document"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-gray-700">
-          <div className="text-xs text-gray-400 text-center">
-            {documentsCount} document{documentsCount !== 1 ? "s" : ""} loaded
+          <div className="flex items-center justify-center space-x-2">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            <div className="text-xs text-gray-400">
+              {documentsCount} document{documentsCount !== 1 ? "s" : ""} loaded
+            </div>
           </div>
+          {documentsCount > 0 && (
+            <div className="mt-2 flex items-center justify-center space-x-2">
+              <button
+                onClick={() => setShowDocuments(!showDocuments)}
+                className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
+              >
+                {showDocuments ? "Hide" : "Show"} Documents
+              </button>
+              <span className="text-gray-500">•</span>
+              <span className="text-xs text-gray-500">
+                Ready to answer questions
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -567,6 +864,15 @@ export default function Home() {
 
           {/* Upload and Delete Buttons */}
           <div className="flex items-center space-x-2">
+            {messages.length > 1 && (
+              <button
+                onClick={exportChat}
+                className="px-3 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-all text-sm font-medium cursor-pointer"
+                title="Export chat conversation"
+              >
+                📥
+              </button>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -595,7 +901,22 @@ export default function Home() {
         {/* Upload Status */}
         {uploadMessage && (
           <div className="bg-blue-900/50 border-b border-blue-700 px-4 py-2">
-            <p className="text-sm text-blue-200">{uploadMessage}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-blue-200">{uploadMessage}</p>
+              {isUploading && uploadProgress > 0 && (
+                <div className="flex items-center space-x-2">
+                  <div className="w-16 bg-blue-700 rounded-full h-2">
+                    <div
+                      className="bg-blue-300 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-blue-300">
+                    {Math.round(uploadProgress)}%
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -610,18 +931,43 @@ export default function Home() {
 
         {/* Messages Container */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 dark-scrollbar">
+          {messages.length === 1 && documentsCount === 0 && (
+            <div className="flex justify-center items-center h-64">
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto">
+                  <span className="text-white text-2xl">📄</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-200 mb-2">
+                    Welcome to Document Assistant
+                  </h3>
+                  <p className="text-gray-400 text-sm max-w-md">
+                    Upload your documents (PDF, DOCX, DOC, TXT, MD, RTF) and
+                    I&apos;ll help you find answers to any questions about their
+                    content.
+                  </p>
+                </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all text-sm font-medium cursor-pointer"
+                >
+                  📄 Upload Your First Document
+                </button>
+              </div>
+            </div>
+          )}
           {messages.map((message) => (
             <div
               key={message.id}
               className={`flex ${
                 message.type === "user" ? "justify-end" : "justify-start"
-              }`}
+              } mb-6`}
             >
               <div
-                className={`max-w-[80%] lg:max-w-[70%] rounded-2xl px-4 py-3 ${
+                className={`max-w-[85%] lg:max-w-[75%] rounded-2xl px-4 py-3 ${
                   message.type === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-800 border border-gray-700 text-gray-100"
+                    ? "bg-blue-600 text-white shadow-lg"
+                    : "bg-gray-800 border border-gray-700 text-gray-100 shadow-lg"
                 }`}
               >
                 <div className="whitespace-pre-wrap">{message.content}</div>
@@ -671,32 +1017,47 @@ export default function Home() {
                   </div>
                 )}
 
-                <div className="text-xs opacity-70 mt-2">
-                  {formatTime(message.timestamp)}
-                </div>
+                {isClient && (
+                  <div
+                    className="text-xs opacity-70 mt-2"
+                    title={message.timestamp.toISOString()}
+                  >
+                    {formatTime(message.timestamp)}
+                  </div>
+                )}
+                {!isClient && (
+                  <div className="text-xs opacity-70 mt-2">
+                    {/* Placeholder to maintain layout during SSR */}
+                  </div>
+                )}
               </div>
             </div>
           ))}
 
           {/* Loading Indicator */}
           {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3">
-                <div className="flex items-center space-x-2">
+            <div className="flex justify-start mb-6">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3 shadow-lg">
+                <div className="flex items-center space-x-3">
                   <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
                     <div
-                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
                       style={{ animationDelay: "0.1s" }}
                     ></div>
                     <div
-                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
                       style={{ animationDelay: "0.2s" }}
                     ></div>
                   </div>
-                  <span className="text-sm text-gray-400">
-                    AI is thinking...
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm text-gray-300 font-medium">
+                      AI is thinking...
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      Searching documents and generating response
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -712,7 +1073,13 @@ export default function Home() {
               <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Ask me anything about your documents..."
+                placeholder={
+                  documentsCount > 0
+                    ? `Ask me anything about your ${documentsCount} document${
+                        documentsCount !== 1 ? "s" : ""
+                      }...`
+                    : "Upload documents first, then ask me anything..."
+                }
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-gray-100 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
                 rows={1}
                 style={{ minHeight: "44px", maxHeight: "120px" }}
@@ -733,8 +1100,24 @@ export default function Home() {
             </button>
           </form>
 
+          {/* Regenerate Button */}
+          {canRegenerate && !isLoading && messages.length > 1 && (
+            <div className="mt-3 flex justify-center">
+              <button
+                onClick={regenerateResponse}
+                className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-all text-sm font-medium cursor-pointer flex items-center space-x-2"
+              >
+                <span>🔄</span>
+                <span>Regenerate response</span>
+              </button>
+            </div>
+          )}
+
           <div className="mt-2 text-xs text-gray-400 text-center">
-            Press Enter to send, Shift+Enter for new line
+            Press Enter to send, Shift+Enter for new line •
+            <span className="ml-1 text-gray-500">
+              ⌘+N: New chat • ⌘+K: Focus input • ⌘+U: Upload file • Esc: Clear
+            </span>
           </div>
         </div>
       </div>

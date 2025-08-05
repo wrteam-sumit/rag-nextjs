@@ -1,0 +1,51 @@
+[tool.poetry]
+name = "rag-backend"
+version = "0.1.0"
+description = "RAG (Retrieval-Augmented Generation) backend with FastAPI"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+# Core Framework
+fastapi = "^0.104.0"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+python-multipart = "^0.0.6"
+python-dotenv = "^1.0.0"
+
+# Database
+sqlalchemy = "^2.0.0"
+psycopg2-binary = "^2.9.0"
+
+# Document Processing
+PyPDF2 = "^3.0.0"
+pdfplumber = "^0.10.0"
+PyMuPDF = "^1.23.0"
+Pillow = "^10.0.0"
+python-docx = "^0.8.11"
+mammoth = "^1.6.0"
+
+# AI & Embeddings
+google-generativeai = "^0.3.0"
+
+# Vector Database
+qdrant-client = "^1.7.0"
+
+# Utilities
+pydantic = "^2.5.0"
+pydantic-settings = "^2.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+black = "^23.0.0"
+flake8 = "^6.0.0"
+mypy = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+start = "app.main:main"
+start-simple = "app.main_simple:main" 

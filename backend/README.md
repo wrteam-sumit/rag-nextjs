@@ -19,6 +19,35 @@ Advanced PDF processing and RAG (Retrieval-Augmented Generation) backend built w
 
 ## 🛠️ Installation
 
+### Option 1: Quick Setup with Poetry (Recommended)
+
+1. **Install Poetry** (if not already installed):
+
+   ```bash
+   curl -sSL https://install.python-poetry.org | python3 -
+   ```
+
+2. **Run the setup script:**
+   ```bash
+   ./setup-poetry.sh
+   ```
+
+### Option 2: Manual Poetry Setup
+
+1. **Install dependencies:**
+
+   ```bash
+   poetry install
+   ```
+
+2. **Set up environment variables:**
+   ```bash
+   cp ../env.example .env
+   # Edit .env with your configuration
+   ```
+
+### Option 3: Legacy pip Setup (Deprecated)
+
 1. **Install Python dependencies:**
 
    ```bash
@@ -46,7 +75,17 @@ Advanced PDF processing and RAG (Retrieval-Augmented Generation) backend built w
    ```
 
 4. **Run the backend:**
+
    ```bash
+   # With Poetry (recommended)
+   poetry run start          # Run the full application
+   poetry run start-simple   # Run the simple version
+
+   # Or activate the virtual environment first
+   poetry shell
+   python run.py
+
+   # Legacy pip method (deprecated)
    python run.py
    ```
 
@@ -96,3 +135,32 @@ The backend runs on `http://localhost:8000` and provides:
 ## 📖 API Documentation
 
 Visit `http://localhost:8000/docs` for interactive API documentation.
+
+## 🛠️ Poetry Commands
+
+### Development
+
+```bash
+poetry install          # Install all dependencies
+poetry shell           # Activate virtual environment
+poetry run start       # Run the full application
+poetry run start-simple # Run the simple version
+```
+
+### Dependency Management
+
+```bash
+poetry add package-name                    # Add production dependency
+poetry add --group dev package-name        # Add development dependency
+poetry remove package-name                 # Remove dependency
+poetry update                             # Update all dependencies
+poetry show                               # Show installed packages
+```
+
+### Project Management
+
+```bash
+poetry build                             # Build the project
+poetry publish                           # Publish to PyPI
+poetry export -f requirements.txt --output requirements.txt  # Export to requirements.txt
+```

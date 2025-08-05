@@ -1,35 +1,46 @@
 {
-  "name": "rag-nextjs",
-  "version": "0.1.0",
+  "name": "rag-nextjs-monorepo",
+  "version": "1.0.0",
+  "description": "RAG (Retrieval-Augmented Generation) application with Next.js frontend and FastAPI backend",
   "private": true,
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "db:setup": "node scripts/setup-db.js"
+    "dev": "npm run dev:frontend",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "./run-backend.sh start",
+    "dev:backend-simple": "./run-backend.sh start-simple",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "start": "npm run start:frontend",
+    "start:frontend": "cd frontend && npm run start",
+    "install:frontend": "cd frontend && npm install",
+    "install:backend": "./run-backend.sh install",
+    "install:all": "npm run install:frontend && npm run install:backend",
+    "db:setup": "node scripts/setup-db.js",
+    "backend:add": "./run-backend.sh add",
+    "backend:add-dev": "./run-backend.sh add-dev",
+    "backend:remove": "./run-backend.sh remove",
+    "backend:update": "./run-backend.sh update",
+    "backend:show": "./run-backend.sh show",
+    "backend:shell": "./run-backend.sh shell",
+    "clean": "rm -rf node_modules frontend/node_modules frontend/.next package-lock.json",
+    "setup": "npm run install:all && npm run db:setup",
+    "test:frontend": "cd frontend && npm run lint"
   },
-  "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "@qdrant/js-client-rest": "^1.15.0",
-    "mammoth": "^1.9.1",
-    "next": "15.4.4",
-    "pdf-parse": "^1.1.1",
-    "pg": "^8.11.3",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/pdf-parse": "^1.1.5",
-    "@types/pg": "^8.10.9",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.4.4",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+  "keywords": [
+    "rag",
+    "nextjs",
+    "fastapi",
+    "python",
+    "typescript",
+    "ai",
+    "chat",
+    "vector-search"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
 }

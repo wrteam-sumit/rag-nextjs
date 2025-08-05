@@ -31,4 +31,18 @@ async def test():
 
 # Note: Database tables will be created when first accessed
 # from app.core.database import engine, Base
-# Base.metadata.create_all(bind=engine) 
+# Base.metadata.create_all(bind=engine)
+
+def main():
+    """Main function to run the simple FastAPI application with uvicorn"""
+    import uvicorn
+    uvicorn.run(
+        "app.main_simple:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
+
+if __name__ == "__main__":
+    main() 
