@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react";
 import {
   api,
   DocumentResponse,
-  QueryResponse,
   ChatSessionResponse,
   MessageResponse,
 } from "../lib/api";

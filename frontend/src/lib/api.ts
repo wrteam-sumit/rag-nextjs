@@ -1,4 +1,4 @@
-import { config, API_ENDPOINTS } from "./config";
+import { API_ENDPOINTS } from "./config";
 
 // Types for API responses
 export interface DocumentResponse {
