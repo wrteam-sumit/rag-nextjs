@@ -1,5 +1,3 @@
-specVersion: 1
-
 # Render Blueprint for deploying the FastAPI backend and a managed Postgres database
 
 databases:
