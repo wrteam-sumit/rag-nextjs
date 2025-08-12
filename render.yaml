@@ -33,17 +33,17 @@ services:
 
       # Optional: provide your Google API key
       - key: GOOGLE_API_KEY
-        value: ""
+        value: AIzaSyBJ344Y5VK4zBN2qNqQI3CC8E9fY7iJkFE
 
       # Optional: set ALLOWED_ORIGINS to your frontend URL(s), comma-separated
       - key: ALLOWED_ORIGINS
-        value: "https://your-frontend-domain.example"
+        value: https://rag-nextjs-frontend.vercel.app/
 
       # Optional: Qdrant configuration (leave blank if not using Qdrant Cloud yet)
       - key: QDRANT_URL
-        value: ""
+        value: http://localhost:6333
       - key: QDRANT_API_KEY
-        value: ""
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.2baXI6tKhqem1i057dI3sN9hmhEaINag1ys4_BcE32w
 
       # Optional: turn off non-essential features in hosted environment by default
       - key: MCP_SERVER_ENABLED
