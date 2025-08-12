@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "npm ci && npm_config_platform=linux npm_config_arch=x64 npm_config_libc=glibc npm install --no-save lightningcss",
+  "buildCommand": "npm run build"
+}
