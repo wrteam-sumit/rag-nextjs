@@ -41,6 +41,7 @@
   ],
   "author": "Your Name",
   "license": "MIT",
-  "devDependencies": {},
-  "dependencies": {}
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
 }

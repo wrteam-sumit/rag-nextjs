@@ -1,0 +1,31 @@
+import { NextRequest, NextResponse } from "next/server";
+import { config } from "../../../../lib/config";
+
+export async function GET(request: NextRequest) {
+  try {
+    // Forward the request to the Python backend
+    const response = await fetch(`${config.API_BASE_URL}/api/query/domains`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return NextResponse.json(
+        { error: error.detail || "Failed to fetch domains" },
+        { status: response.status }
+      );
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Error fetching domains:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch domains" },
+      { status: 500 }
+    );
+  }
+}

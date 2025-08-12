@@ -24,6 +24,7 @@ export const API_ENDPOINTS = {
 
   // Query
   QUERY_DOCUMENTS: `/api/query`,
+  GET_DOMAINS: `/api/query/domains`,
 
   // Chat
   GET_CHAT_SESSIONS: `/api/chat`,

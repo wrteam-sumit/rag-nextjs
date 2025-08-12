@@ -3,7 +3,8 @@ import { config } from "../../../lib/config";
 
 export async function POST(request: NextRequest) {
   try {
-    const { question } = await request.json();
+    const { question, session_id, domain, use_web_search } =
+      await request.json();
 
     if (!question || question.trim().length === 0) {
       return NextResponse.json(
@@ -16,14 +17,22 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("🤔 Processing question:", question);
+    console.log("🔍 Session ID:", session_id);
+    console.log("🎯 Domain:", domain);
+    console.log("🌐 Web search:", use_web_search);
 
-    // Call the Python backend
+    // Call the Python backend with all parameters
     const response = await fetch(`${config.API_BASE_URL}/api/query/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({
+        question,
+        session_id,
+        domain,
+        use_web_search: use_web_search !== false, // Default to true if not specified
+      }),
     });
 
     if (!response.ok) {

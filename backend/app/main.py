@@ -14,9 +14,11 @@ app = FastAPI(
 )
 
 # CORS middleware
+origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(',') if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js frontend
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

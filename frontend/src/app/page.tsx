@@ -7,6 +7,7 @@ import {
   ChatSessionResponse,
   MessageResponse,
 } from "../lib/api";
+import SettingsPanel from "../components/SettingsPanel";
 
 interface Message {
   id: string;
@@ -19,6 +20,11 @@ interface Message {
     aiMethod?: string;
     fallbackUsed?: boolean;
     documentsFound?: number;
+    domain?: string;
+    domainName?: string;
+    domainDescription?: string;
+    webSearchUsed?: boolean;
+    modelUsed?: string;
   };
 }
 
@@ -38,7 +44,7 @@ export default function Home() {
       id: "1",
       type: "assistant",
       content:
-        "Hello! I'm your AI assistant. I can help you with questions about your uploaded documents. You can upload PDF, DOCX, DOC, TXT, MD, and RTF files and ask me anything about their content.",
+        "Hello! I’m your AI assistant. Ask me anything. In Web mode I’ll search the web. In Document mode, upload PDF, DOCX, DOC, TXT, MD, or RTF (max 10MB) and ask about them. In Hybrid mode I use your documents first, then the web if needed.",
       timestamp: new Date(),
     },
   ]);
@@ -58,6 +64,15 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Multi-agent system state
+  const [selectedDomain, setSelectedDomain] = useState("general");
+  const [useWebSearch, setUseWebSearch] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [availableDomains, setAvailableDomains] = useState<
+    Array<{ id: string; name: string; description: string }>
+  >([]);
+  const [chatMode, setChatMode] = useState("hybrid"); // "document", "web", "hybrid"
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -70,6 +85,60 @@ export default function Home() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Load available domains
+  const loadAvailableDomains = async () => {
+    try {
+      const domainsResponse = await api.getAvailableDomains();
+      setAvailableDomains(domainsResponse.domains);
+    } catch (error) {
+      console.error("Failed to load domains:", error);
+    }
+  };
+
+  // Load chat sessions from database
+  const loadChatSessions = async () => {
+    try {
+      const response = await fetch("/api/chat");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.sessions && data.sessions.length > 0) {
+          const sessions = data.sessions.map(
+            (session: ChatSessionResponse) => ({
+              id: session.session_id,
+              title: session.title,
+              messages: [],
+              createdAt: new Date(session.created_at),
+              updatedAt: new Date(session.updated_at || session.created_at),
+            })
+          );
+          setChatSessions(sessions);
+          setCurrentChatId(sessions[0].id);
+          // Load messages for the first session
+          await loadMessages(sessions[0].id);
+        } else {
+          // No existing sessions, create a new one
+          await createNewChat();
+        }
+      } else {
+        // Error loading sessions, create a new one
+        await createNewChat();
+      }
+    } catch (error) {
+      console.error("Error loading chat sessions:", error);
+      // If there's an error, create a new chat
+      await createNewChat();
+    }
+  };
+
+  // Load initial data
+  useEffect(() => {
+    if (isClient) {
+      loadChatSessions();
+      fetchDocumentsCount();
+      loadAvailableDomains();
+    }
+  }, [isClient]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -105,46 +174,6 @@ export default function Home() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Load chat sessions from database on mount
-  useEffect(() => {
-    const loadChatSessions = async () => {
-      try {
-        const response = await fetch("/api/chat");
-        if (response.ok) {
-          const data = await response.json();
-          if (data.sessions && data.sessions.length > 0) {
-            const sessions = data.sessions.map(
-              (session: ChatSessionResponse) => ({
-                id: session.session_id,
-                title: session.title,
-                messages: [],
-                createdAt: new Date(session.created_at),
-                updatedAt: new Date(session.updated_at || session.created_at),
-              })
-            );
-            setChatSessions(sessions);
-            setCurrentChatId(sessions[0].id);
-            // Load messages for the first session
-            await loadMessages(sessions[0].id);
-          } else {
-            // No existing sessions, create a new one
-            await createNewChat();
-          }
-        } else {
-          // Error loading sessions, create a new one
-          await createNewChat();
-        }
-      } catch (error) {
-        console.error("Error loading chat sessions:", error);
-        // If there's an error, create a new chat
-        await createNewChat();
-      }
-    };
-
-    loadChatSessions();
-    fetchDocumentsCount();
-  }, []);
-
   const loadMessages = async (sessionId: string) => {
     try {
       const messages = await api.getMessages(sessionId);
@@ -172,7 +201,7 @@ export default function Home() {
           id: "1",
           type: "assistant",
           content:
-            "Hello! I'm your AI assistant. I can help you with questions about your uploaded documents. You can upload PDF, DOCX, DOC, TXT, MD, and RTF files and ask me anything about their content.",
+            "Hello! I’m your AI assistant. Ask me anything. In Web mode I’ll search the web. In Document mode, upload PDF, DOCX, DOC, TXT, MD, or RTF (max 10MB) and ask about them. In Hybrid mode I use your documents first, then the web if needed.",
           timestamp: new Date(),
         },
       ],
@@ -197,7 +226,7 @@ export default function Home() {
           messageId: "1",
           type: "assistant",
           content:
-            "Hello! I'm your AI assistant. I can help you with questions about your uploaded documents. You can upload PDF, DOCX, DOC, TXT, MD, and RTF files and ask me anything about their content.",
+            "Hello! I’m your AI assistant. Ask me anything. In Web mode I’ll search the web. In Document mode, upload PDF, DOCX, DOC, TXT, MD, or RTF (max 10MB) and ask about them. In Hybrid mode I use your documents first, then the web if needed.",
         }),
       });
 
@@ -608,7 +637,22 @@ export default function Home() {
     }
 
     try {
-      const result = await api.queryDocuments(inputValue, currentChatId);
+      // Determine web search setting based on chat mode
+      let shouldUseWebSearch = false;
+      if (chatMode === "web") {
+        shouldUseWebSearch = true; // Always use web search in web mode
+      } else if (chatMode === "hybrid") {
+        shouldUseWebSearch = useWebSearch; // Use user setting in hybrid mode
+      } else if (chatMode === "document") {
+        shouldUseWebSearch = false; // Never use web search in document mode
+      }
+
+      const result = await api.queryDocuments(
+        inputValue,
+        currentChatId,
+        selectedDomain === "general" ? undefined : selectedDomain,
+        shouldUseWebSearch
+      );
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -621,6 +665,11 @@ export default function Home() {
           aiMethod: result.ai_method,
           fallbackUsed: result.fallback_used,
           documentsFound: result.documents_found,
+          domain: result.domain,
+          domainName: result.domain_name,
+          domainDescription: result.domain_description,
+          webSearchUsed: result.web_search_used,
+          modelUsed: result.model_used,
         },
       };
 
@@ -852,7 +901,11 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-gray-100">
-                Document Assistant
+                {chatMode === "web"
+                  ? "Web Assistant"
+                  : chatMode === "hybrid"
+                  ? "Hybrid Assistant"
+                  : "Document Assistant"}
               </h1>
               <p className="text-sm text-gray-400">
                 {chatSessions.find((c) => c.id === currentChatId)?.title ||
@@ -872,28 +925,39 @@ export default function Home() {
                 📥
               </button>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx,.doc,.txt,.md,.rtf"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
             <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all text-sm font-medium cursor-pointer"
-              title="Supported formats: PDF, DOCX, DOC, TXT, MD, RTF"
+              onClick={() => setIsSettingsOpen(true)}
+              className="px-3 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-all text-sm font-medium cursor-pointer"
+              title="AI Settings - Domain selection and web search"
             >
-              📄 Upload Document
+              ⚙️
             </button>
-            <button
-              onClick={deleteAllDocuments}
-              disabled={isDeletingDocuments}
-              className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-medium cursor-pointer"
-              title="Delete all documents, messages, and chat sessions from database"
-            >
-              {isDeletingDocuments ? "🗑️ Clearing..." : "🗑️ Clear All Data"}
-            </button>
+            {chatMode !== "web" && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt,.md,.rtf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all text-sm font-medium cursor-pointer"
+                  title="Supported formats: PDF, DOCX, DOC, TXT, MD, RTF"
+                >
+                  📄 Upload Document
+                </button>
+                <button
+                  onClick={deleteAllDocuments}
+                  disabled={isDeletingDocuments}
+                  className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm font-medium cursor-pointer"
+                  title="Delete all documents, messages, and chat sessions from database"
+                >
+                  {isDeletingDocuments ? "🗑️ Clearing..." : "🗑️ Clear All Data"}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -920,7 +984,7 @@ export default function Home() {
         )}
 
         {/* File Format Info */}
-        {!uploadMessage && (
+        {!uploadMessage && chatMode !== "web" && (
           <div className="bg-gray-800/50 border-b border-gray-700 px-4 py-2">
             <p className="text-xs text-gray-400 text-center">
               Supported formats: PDF, DOCX, DOC, TXT, MD, RTF (max 10MB)
@@ -932,27 +996,81 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 dark-scrollbar">
           {messages.length === 1 && documentsCount === 0 && (
             <div className="flex justify-center items-center h-64">
-              <div className="text-center space-y-4">
-                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto">
-                  <span className="text-white text-2xl">📄</span>
+              {chatMode === "web" ? (
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto">
+                    <span className="text-white text-2xl">🌐</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-200 mb-2">
+                      Welcome to Web Assistant
+                    </h3>
+                    <p className="text-gray-400 text-sm max-w-md mx-auto">
+                      Ask me anything. I’ll search the web and summarize the
+                      latest information for you. Use the ⚙️ Settings to select
+                      a domain if needed.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-200 mb-2">
-                    Welcome to Document Assistant
-                  </h3>
-                  <p className="text-gray-400 text-sm max-w-md">
-                    Upload your documents (PDF, DOCX, DOC, TXT, MD, RTF) and
-                    I&apos;ll help you find answers to any questions about their
-                    content.
-                  </p>
+              ) : chatMode === "hybrid" ? (
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto">
+                    <span className="text-white text-2xl">🔄</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-200 mb-2">
+                      Welcome to Hybrid Assistant
+                    </h3>
+                    <p className="text-gray-400 text-sm max-w-md mx-auto">
+                      I’ll use your documents first and fall back to web search
+                      if needed. You can upload files or just start asking
+                      questions.
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center space-x-3">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all text-sm font-medium cursor-pointer"
+                    >
+                      📄 Upload Document
+                    </button>
+                    <span className="text-gray-500 text-sm">or</span>
+                    <button
+                      onClick={() => {
+                        const textarea = document.querySelector(
+                          "textarea"
+                        ) as HTMLTextAreaElement;
+                        textarea?.focus();
+                      }}
+                      className="px-6 py-3 bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-all text-sm font-medium cursor-pointer"
+                    >
+                      ✍️ Ask a question
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all text-sm font-medium cursor-pointer"
-                >
-                  📄 Upload Your First Document
-                </button>
-              </div>
+              ) : (
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto">
+                    <span className="text-white text-2xl">📄</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-200 mb-2">
+                      Welcome to Document Assistant
+                    </h3>
+                    <p className="text-gray-400 text-sm max-w-md">
+                      Upload your documents (PDF, DOCX, DOC, TXT, MD, RTF) and
+                      I’ll help you find answers to any questions about their
+                      content.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all text-sm font-medium cursor-pointer"
+                  >
+                    📄 Upload Your First Document
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {messages.map((message) => (
@@ -998,11 +1116,35 @@ export default function Home() {
                 {message.metadata && (
                   <div className="mt-2 pt-2 border-t border-gray-600">
                     <div className="flex items-center space-x-4 text-xs text-gray-400">
+                      {message.metadata.domain &&
+                        message.metadata.domain !== "general" && (
+                          <span title={message.metadata.domainDescription}>
+                            🎯{" "}
+                            {message.metadata.domainName ||
+                              message.metadata.domain}
+                          </span>
+                        )}
+                      {message.metadata.webSearchUsed && (
+                        <span
+                          className="text-blue-400"
+                          title="Web search was used to enhance the response"
+                        >
+                          🌐 Web search
+                        </span>
+                      )}
+                      {message.metadata.modelUsed && (
+                        <span title={`Model: ${message.metadata.modelUsed}`}>
+                          🤖{" "}
+                          {message.metadata.modelUsed.includes("gemini")
+                            ? "Gemini"
+                            : message.metadata.modelUsed}
+                        </span>
+                      )}
                       {message.metadata.searchMethod && (
                         <span>🔍 {message.metadata.searchMethod}</span>
                       )}
                       {message.metadata.aiMethod && (
-                        <span>🤖 {message.metadata.aiMethod}</span>
+                        <span>⚡ {message.metadata.aiMethod}</span>
                       )}
                       {message.metadata.fallbackUsed && (
                         <span className="text-orange-400">
@@ -1073,11 +1215,19 @@ export default function Home() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={
-                  documentsCount > 0
-                    ? `Ask me anything about your ${documentsCount} document${
+                  chatMode === "web"
+                    ? "Ask me anything - I'll search the web for you..."
+                    : chatMode === "document"
+                    ? documentsCount > 0
+                      ? `Ask me about your ${documentsCount} document${
+                          documentsCount !== 1 ? "s" : ""
+                        }...`
+                      : "Upload documents first, then ask me about them..."
+                    : documentsCount > 0
+                    ? `Ask me about your ${documentsCount} document${
                         documentsCount !== 1 ? "s" : ""
-                      }...`
-                    : "Upload documents first, then ask me anything..."
+                      } or anything else...`
+                    : "Ask me anything - I'll search the web for you..."
                 }
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-gray-100 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
                 rows={1}
@@ -1120,6 +1270,18 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Settings Panel */}
+      <SettingsPanel
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        selectedDomain={selectedDomain}
+        onDomainChange={setSelectedDomain}
+        useWebSearch={useWebSearch}
+        onWebSearchChange={setUseWebSearch}
+        chatMode={chatMode}
+        onChatModeChange={setChatMode}
+      />
     </div>
   );
 }

@@ -26,6 +26,21 @@ export interface QueryResponse {
   ai_method: string;
   embedding_method: string;
   fallback_used: boolean;
+  domain: string;
+  domain_name: string;
+  domain_description: string;
+  web_search_used: boolean;
+  model_used: string;
+}
+
+export interface DomainInfo {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface DomainsResponse {
+  domains: DomainInfo[];
 }
 
 export interface ChatSessionResponse {
@@ -87,10 +102,12 @@ export const api = {
     }
   },
 
-  // Query operations
+  // Query operations with multi-agent support
   async queryDocuments(
     question: string,
-    sessionId?: string
+    sessionId?: string,
+    domain?: string,
+    useWebSearch: boolean = true
   ): Promise<QueryResponse> {
     const response = await fetch(API_ENDPOINTS.QUERY_DOCUMENTS, {
       method: "POST",
@@ -100,12 +117,25 @@ export const api = {
       body: JSON.stringify({
         question,
         session_id: sessionId,
+        domain,
+        use_web_search: useWebSearch,
       }),
     });
 
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || "Failed to query documents");
+    }
+
+    return response.json();
+  },
+
+  // Domain operations
+  async getAvailableDomains(): Promise<DomainsResponse> {
+    const response = await fetch(API_ENDPOINTS.GET_DOMAINS);
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch available domains");
     }
 
     return response.json();
