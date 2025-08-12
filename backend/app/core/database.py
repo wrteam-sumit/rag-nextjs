@@ -6,9 +6,23 @@ from app.core.config import settings
 import uuid
 
 # Database URL: allow full URL override for managed DBs like Neon/Render
-DATABASE_URL = settings.DATABASE_URL or (
+raw_database_url = settings.DATABASE_URL or (
     f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
 )
+
+# Normalize 'postgres://' scheme to 'postgresql://' for SQLAlchemy
+if raw_database_url.startswith("postgres://"):
+    raw_database_url = raw_database_url.replace("postgres://", "postgresql://", 1)
+
+# Enforce SSL by default for non-local hosts if not already specified
+if (
+    "sslmode=" not in raw_database_url
+    and not any(h in raw_database_url for h in ["localhost", "127.0.0.1"])
+):
+    separator = "&" if "?" in raw_database_url else "?"
+    raw_database_url = f"{raw_database_url}{separator}sslmode=require"
+
+DATABASE_URL = raw_database_url
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
