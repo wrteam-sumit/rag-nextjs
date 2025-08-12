@@ -35,7 +35,7 @@ services:
 
       # Optional: set ALLOWED_ORIGINS to your frontend URL(s), comma-separated
       - key: ALLOWED_ORIGINS
-        value: https://rag-nextjs-frontend.vercel.app/
+        value: https://rag-nextjs-frontend.vercel.app
 
       # Optional: Qdrant configuration (leave blank if not using Qdrant Cloud yet)
       - key: QDRANT_URL
@@ -47,4 +47,4 @@ services:
       - key: MCP_SERVER_ENABLED
         value: "false"
       - key: WEB_SEARCH_ENABLED
-        value: "false"
+        value: "true"
