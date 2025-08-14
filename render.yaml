@@ -14,9 +14,7 @@ services:
     autoDeploy: true
     healthCheckPath: /health
 
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
+    buildCommand: ./build.sh
 
     startCommand: uvicorn app.main_simple:app --host 0.0.0.0 --port $PORT
 

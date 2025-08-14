@@ -40,7 +40,6 @@ httpx = "^0.27.0"
 
 # Web Search & Content Extraction
 duckduckgo-search = "^4.1.1"
-trafilatura = "^6.0.0"
 requests = "^2.31.0"
 
 [tool.poetry.group.dev.dependencies]
