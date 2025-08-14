@@ -27,8 +27,8 @@ mammoth = "^1.6.0"
 # AI & Embeddings
 google-generativeai = "^0.3.0"
 
-# Vector Database
-qdrant-client = "^1.7.0"
+# Vector Database - Updated for Python 3.13 compatibility
+qdrant-client = "^1.15.1"
 
 # Utilities
 pydantic = "^2.5.0"
