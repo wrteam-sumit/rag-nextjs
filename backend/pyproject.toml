@@ -8,7 +8,7 @@ packages = [{include = "app"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-# Core Framework - Using very stable versions
+# Core Framework - Using compatible versions
 fastapi = "^0.88.0"
 uvicorn = {extras = ["standard"], version = "^0.20.0"}
 python-multipart = "^0.0.6"
@@ -27,11 +27,11 @@ mammoth = "^1.6.0"
 # AI & Embeddings
 google-generativeai = "^0.3.0"
 
-# Vector Database - Updated for Python 3.13 compatibility
-qdrant-client = "^1.15.1"
+# Vector Database - Using older version compatible with pydantic v1
+qdrant-client = "^1.1.1"
 
-# Utilities - Using very stable versions
-pydantic = "^1.10.2"
+# Utilities - Using compatible pydantic version
+pydantic = "^1.10.8"
 python-jose = "^3.3.0"
 httpx = "^0.23.3"
 
