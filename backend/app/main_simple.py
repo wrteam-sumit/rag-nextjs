@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="RAG API",
@@ -8,10 +13,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
+# CORS middleware - allow both localhost and Vercel frontend
+origins = [
+    "http://localhost:3000",
+    "https://rag-nextjs-frontend.vercel.app",
+    "https://rag-nextjs.vercel.app"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js frontend
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -19,15 +30,19 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "RAG API is running!"}
+    return {"message": "RAG API is running!", "status": "healthy"}
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "message": "Backend is operational"}
 
 @app.get("/test")
 async def test():
-    return {"message": "Python backend is working!"}
+    return {"message": "Python backend is working!", "timestamp": "2025-08-14"}
+
+@app.get("/api/test")
+async def api_test():
+    return {"message": "API endpoints are accessible", "version": "1.0.0"}
 
 # Note: Database tables will be created when first accessed
 # from app.core.database import engine, Base
@@ -36,6 +51,7 @@ async def test():
 def main():
     """Main function to run the simple FastAPI application with uvicorn"""
     import uvicorn
+    logger.info("Starting RAG API server...")
     uvicorn.run(
         "app.main_simple:app",
         host="0.0.0.0",

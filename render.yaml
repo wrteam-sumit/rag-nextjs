@@ -20,7 +20,7 @@ services:
       poetry config virtualenvs.create false
       poetry install --no-interaction --no-ansi --without dev
 
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app.main_simple:app --host 0.0.0.0 --port $PORT
 
     envVars:
       # DATABASE_URL will automatically reference the managed Postgres instance above
@@ -29,9 +29,9 @@ services:
           name: rag-db
           property: connectionString
 
-      # Optional: set ALLOWED_ORIGINS to your frontend URL(s), comma-separated
+      # Frontend URLs for CORS
       - key: ALLOWED_ORIGINS
-        value: https://rag-nextjs-frontend.vercel.app
+        value: https://rag-nextjs-frontend.vercel.app,https://rag-nextjs.vercel.app
 
       # Optional: Qdrant configuration. Set these securely in Render Dashboard env vars if used.
       # - key: QDRANT_URL
