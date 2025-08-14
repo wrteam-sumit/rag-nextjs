@@ -26,21 +26,20 @@ export interface QueryResponse {
   ai_method: string;
   embedding_method: string;
   fallback_used: boolean;
-  domain: string;
-  domain_name: string;
-  domain_description: string;
+  assistant_name: string;
+  assistant_description: string;
   web_search_used: boolean;
   model_used: string;
 }
 
-export interface DomainInfo {
+export interface AssistantInfo {
   id: string;
   name: string;
   description: string;
 }
 
-export interface DomainsResponse {
-  domains: DomainInfo[];
+export interface AssistantsResponse {
+  assistants: AssistantInfo[];
 }
 
 export interface ChatSessionResponse {
@@ -65,9 +64,16 @@ export interface MessageResponse {
 // API Functions
 export const api = {
   // Document operations
-  async uploadDocument(file: File): Promise<DocumentResponse> {
+  async uploadDocument(
+    file: File,
+    sessionId?: string
+  ): Promise<DocumentResponse> {
     const formData = new FormData();
     formData.append("file", file);
+
+    if (sessionId) {
+      formData.append("session_id", sessionId);
+    }
 
     const response = await fetch(API_ENDPOINTS.UPLOAD_DOCUMENT, {
       method: "POST",
@@ -102,11 +108,10 @@ export const api = {
     }
   },
 
-  // Query operations with multi-agent support
+  // Query operations with AI assistant support
   async queryDocuments(
     question: string,
     sessionId?: string,
-    domain?: string,
     useWebSearch: boolean = true
   ): Promise<QueryResponse> {
     const response = await fetch(API_ENDPOINTS.QUERY_DOCUMENTS, {
@@ -117,7 +122,6 @@ export const api = {
       body: JSON.stringify({
         question,
         session_id: sessionId,
-        domain,
         use_web_search: useWebSearch,
       }),
     });
@@ -130,12 +134,12 @@ export const api = {
     return response.json();
   },
 
-  // Domain operations
-  async getAvailableDomains(): Promise<DomainsResponse> {
-    const response = await fetch(API_ENDPOINTS.GET_DOMAINS);
+  // Assistant operations
+  async getAvailableAssistants(): Promise<AssistantsResponse> {
+    const response = await fetch(API_ENDPOINTS.GET_DOMAINS); // Keep using same endpoint for now
 
     if (!response.ok) {
-      throw new Error("Failed to fetch available domains");
+      throw new Error("Failed to fetch available assistants");
     }
 
     return response.json();
@@ -198,14 +202,14 @@ export const api = {
     return data.messages || [];
   },
 
-  async createMessage(
+  async saveMessage(
     sessionId: string,
     type: "user" | "assistant",
     content: string,
     sources?: Array<{ filename: string; relevance: string }>,
     metadata?: Record<string, unknown>
   ): Promise<MessageResponse> {
-    const response = await fetch(API_ENDPOINTS.CREATE_MESSAGE, {
+    const response = await fetch(API_ENDPOINTS.SAVE_MESSAGE, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -220,33 +224,20 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error("Failed to create message");
+      throw new Error("Failed to save message");
     }
 
     const data = await response.json();
     return data.message;
   },
 
-  async deleteMessage(messageId: string): Promise<void> {
-    const response = await fetch(API_ENDPOINTS.DELETE_MESSAGE(messageId), {
+  async clearAllMessages(): Promise<void> {
+    const response = await fetch(API_ENDPOINTS.CLEAR_ALL_MESSAGES, {
       method: "DELETE",
     });
 
     if (!response.ok) {
-      throw new Error("Failed to delete message");
-    }
-  },
-
-  async deleteSessionMessages(sessionId: string): Promise<void> {
-    const response = await fetch(
-      API_ENDPOINTS.DELETE_SESSION_MESSAGES(sessionId),
-      {
-        method: "DELETE",
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error("Failed to delete session messages");
+      throw new Error("Failed to clear all messages");
     }
   },
 };

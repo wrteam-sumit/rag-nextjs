@@ -2,10 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { config } from "../../../lib/config";
 
 // GET - Get all documents with content preview
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const response = await fetch(`${config.API_BASE_URL}/api/documents/`);
+    const response = await fetch(`${config.API_BASE_URL}/api/documents/`, {
+      headers: {
+        cookie: request.headers.get("cookie") || "",
+      },
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        // User is not authenticated, return empty documents
+        return NextResponse.json({
+          documents: [],
+          total: 0,
+        });
+      }
       throw new Error(`Backend responded with status: ${response.status}`);
     }
     const documents = await response.json();
@@ -67,6 +78,9 @@ export async function DELETE(request: NextRequest) {
       `${config.API_BASE_URL}/api/documents/${documentId}`,
       {
         method: "DELETE",
+        headers: {
+          cookie: request.headers.get("cookie") || "",
+        },
       }
     );
 

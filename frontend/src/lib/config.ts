@@ -34,7 +34,9 @@ export const API_ENDPOINTS = {
   // Messages
   GET_MESSAGES: (sessionId: string) => `/api/messages?session_id=${sessionId}`,
   CREATE_MESSAGE: `/api/messages`,
+  SAVE_MESSAGE: `/api/messages`,
   DELETE_MESSAGE: (messageId: string) => `/api/messages/${messageId}`,
   DELETE_SESSION_MESSAGES: (sessionId: string) =>
     `/api/messages/session/${sessionId}`,
+  CLEAR_ALL_MESSAGES: `/api/clear-all`,
 };

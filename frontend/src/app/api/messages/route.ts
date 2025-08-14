@@ -11,8 +11,16 @@ export async function GET(request: NextRequest) {
       ? `${config.API_BASE_URL}/api/messages/?session_id=${sessionId}`
       : `${config.API_BASE_URL}/api/messages/`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        cookie: request.headers.get("cookie") || "",
+      },
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        // User is not authenticated, return empty messages
+        return NextResponse.json({ messages: [] });
+      }
       throw new Error(`Backend responded with status: ${response.status}`);
     }
 
@@ -30,7 +38,7 @@ export async function GET(request: NextRequest) {
 // POST - Save a message
 export async function POST(request: NextRequest) {
   try {
-    const { session_id, messageId, type, content, sources, metadata } =
+    const { session_id, type, content, sources, metadata } =
       await request.json();
 
     if (!session_id || !type || !content) {
@@ -51,6 +59,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        cookie: request.headers.get("cookie") || "",
       },
       body: JSON.stringify({
         session_id,
@@ -62,6 +71,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // User is not authenticated
+        return NextResponse.json(
+          { error: "Authentication required. Please log in." },
+          { status: 401 }
+        );
+      }
       const errorData = await response.json();
       throw new Error(errorData.detail || "Failed to create message");
     }

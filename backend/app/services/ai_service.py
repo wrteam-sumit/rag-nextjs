@@ -5,15 +5,23 @@ from typing import List, Dict, Any
 import random
 import hashlib
 import requests
-import json
 
 logger = logging.getLogger(__name__)
 
 class AIService:
     def __init__(self):
-        # Initialize Google Gemini
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
-        self.generation_model = genai.GenerativeModel(settings.GENERATION_MODEL)
+        # Initialize Google Gemini only if API key is available
+        self.google_api_available = bool(settings.GOOGLE_API_KEY)
+        if self.google_api_available:
+            try:
+                genai.configure(api_key=settings.GOOGLE_API_KEY)
+                self.generation_model = genai.GenerativeModel(settings.GENERATION_MODEL)
+                logger.info("Google Gemini API configured successfully")
+            except Exception as e:
+                logger.error(f"Failed to configure Google Gemini: {str(e)}")
+                self.google_api_available = False
+        else:
+            logger.warning("GOOGLE_API_KEY not configured. AI generation will use fallback responses.")
         
         # Initialize all-MiniLM-L6-v2 for embeddings
         self.embedding_model_name = "sentence-transformers/all-MiniLM-L6-v2"
@@ -138,6 +146,11 @@ class AIService:
     async def generate_response(self, question: str, context: str) -> str:
         """Generate response using Google Gemini"""
         try:
+            # Check if Google API is available
+            if not self.google_api_available:
+                logger.warning("Google API not available, using fallback response")
+                return self._create_fallback_response_from_context(context, question)
+            
             # Limit context size to avoid Gemini API limits
             max_context_length = 15000  # Reduced from 30000 to be safe
             if len(context) > max_context_length:

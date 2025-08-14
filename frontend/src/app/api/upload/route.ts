@@ -34,6 +34,9 @@ export async function POST(request: NextRequest) {
       `${config.API_BASE_URL}/api/documents/upload`,
       {
         method: "POST",
+        headers: {
+          cookie: request.headers.get("cookie") || "",
+        },
         body: backendFormData,
       }
     );

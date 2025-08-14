@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { config } from "../../../lib/config";
 
 // GET - Get all chat sessions
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const response = await fetch(`${config.API_BASE_URL}/api/chat/`);
+    const response = await fetch(`${config.API_BASE_URL}/api/chat/`, {
+      headers: {
+        cookie: request.headers.get("cookie") || "",
+      },
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        // User is not authenticated, return empty sessions
+        return NextResponse.json({ sessions: [] });
+      }
       throw new Error(`Backend responded with status: ${response.status}`);
     }
     const data = await response.json();
@@ -35,11 +43,19 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        cookie: request.headers.get("cookie") || "",
       },
       body: JSON.stringify({ session_id, title }),
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // User is not authenticated
+        return NextResponse.json(
+          { error: "Authentication required. Please log in." },
+          { status: 401 }
+        );
+      }
       const errorData = await response.json();
       throw new Error(errorData.detail || "Failed to create chat session");
     }
@@ -72,6 +88,9 @@ export async function DELETE(request: NextRequest) {
       `${config.API_BASE_URL}/api/chat/${sessionId}`,
       {
         method: "DELETE",
+        headers: {
+          cookie: request.headers.get("cookie") || "",
+        },
       }
     );
 

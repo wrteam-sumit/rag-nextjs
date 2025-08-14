@@ -42,8 +42,18 @@ def create_document(db: Session, document: DocumentCreate) -> DocumentDB:
     db.refresh(db_document)
     return db_document
 
-def get_all_documents(db: Session) -> List[DocumentDB]:
-    return db.query(DocumentDB).all()
+def get_all_documents(db: Session, user_id: str = None) -> List[DocumentDB]:
+    query = db.query(DocumentDB)
+    if user_id:
+        query = query.filter(DocumentDB.user_id == user_id)
+    return query.all()
+
+def get_documents_by_session(db: Session, user_id: str, session_id: str) -> List[DocumentDB]:
+    """Get documents for a specific user and session"""
+    return db.query(DocumentDB).filter(
+        DocumentDB.user_id == user_id,
+        DocumentDB.session_id == session_id
+    ).all()
 
 def get_document_by_id(db: Session, document_id: str) -> Optional[DocumentDB]:
     return db.query(DocumentDB).filter(DocumentDB.document_id == document_id).first()

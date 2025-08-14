@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.auth import get_current_user
 from app.services.ai_service import AIService
 from app.services.vector_service import VectorService
-from app.services.multi_agent_service import MultiAgentService, AgentDomain
-from app.models.document import get_all_documents
+from app.services.multi_agent_service import AIService as MultiAgentService
+from app.models.document import get_all_documents, get_documents_by_session
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +21,6 @@ multi_agent_service = MultiAgentService()
 class QueryRequest(BaseModel):
     question: str
     session_id: str = None  # Optional session ID to filter documents by chat creation time
-    domain: Optional[str] = None  # Optional domain selection (health, agriculture, legal, finance, education, general)
     use_web_search: bool = True  # Whether to use web search when context is insufficient
 
 class QueryResponse(BaseModel):
@@ -30,26 +31,25 @@ class QueryResponse(BaseModel):
     ai_method: str
     embedding_method: str
     fallback_used: bool
-    domain: str
-    domain_name: str
-    domain_description: str
+    assistant_name: str
+    assistant_description: str
     web_search_used: bool = False
     model_used: str
 
 @router.post("/", response_model=QueryResponse)
 async def query_documents(
     request: QueryRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)  # Require authentication
 ):
-    """Query documents using RAG with multi-agent system"""
+    """Query documents using RAG with AI assistant and web search for the authenticated user"""
     try:
         question = request.question.strip()
         if not question:
             raise HTTPException(status_code=400, detail="Question is required")
         
-        logger.info(f"🔍 Processing question: {question}")
+        logger.info(f"🔍 Processing question for user {current_user.user_id}: {question}")
         logger.info(f"🔍 Session ID received: {request.session_id}")
-        logger.info(f"🔍 Domain requested: {request.domain}")
         logger.info(f"🔍 Web search enabled: {request.use_web_search}")
         
         # Get chat session creation time if session_id is provided
@@ -57,16 +57,20 @@ async def query_documents(
         logger.info(f"🔍 Request session_id: {request.session_id}")
         if request.session_id:
             from app.core.database import ChatSession
-            chat_session = db.query(ChatSession).filter(ChatSession.session_id == request.session_id).first()
+            # Ensure the chat session belongs to the current user
+            chat_session = db.query(ChatSession).filter(
+                ChatSession.session_id == request.session_id,
+                ChatSession.user_id == current_user.user_id
+            ).first()
             if chat_session:
                 chat_creation_time = chat_session.created_at
                 logger.info(f"🔍 Filtering documents for chat session {request.session_id} created at {chat_creation_time}")
                 logger.info(f"🔍 Chat session found: {chat_session.session_id}")
             else:
-                logger.warning(f"❌ Chat session {request.session_id} not found")
-                logger.warning(f"❌ Available chat sessions: {[cs.session_id for cs in db.query(ChatSession).all()]}")
+                logger.warning(f"❌ Chat session {request.session_id} not found or access denied for user {current_user.user_id}")
+                logger.warning(f"❌ Available chat sessions for user: {[cs.session_id for cs in db.query(ChatSession).filter(ChatSession.user_id == current_user.user_id).all()]}")
         else:
-            logger.info("🔍 No session_id provided, searching all documents")
+            logger.info("🔍 No session_id provided, searching all user documents")
         
         logger.info(f"🔍 Final chat_creation_time: {chat_creation_time}")
         
@@ -81,150 +85,194 @@ async def query_documents(
         # Try vector search first
         if vector_service.is_available():
             try:
-                vector_results = vector_service.search_documents(query_embeddings, limit=10)  # Increased limit for filtering
-                logger.info(f"🔍 Vector search returned {len(vector_results)} results")
+                # Use session-based search if session_id is provided
+                if request.session_id:
+                    vector_results = vector_service.search_documents_with_session_filter(
+                        query_embeddings, 
+                        current_user.user_id,
+                        request.session_id,
+                        limit=10
+                    )
+                    logger.info(f"🔍 Session-based vector search returned {len(vector_results)} results for user {current_user.user_id}, session {request.session_id}")
+                    
+                    # If no session-specific results, fall back to user-based search
+                    if not vector_results:
+                        logger.info("🔄 No session-specific documents found, falling back to user-based search")
+                        vector_results = vector_service.search_documents_with_user_filter(
+                            query_embeddings, 
+                            current_user.user_id,
+                            limit=10
+                        )
+                        logger.info(f"🔍 User-based vector search returned {len(vector_results)} results for user {current_user.user_id}")
+                        search_method = "user_vector_search_fallback"
+                    else:
+                        search_method = "session_vector_search"
+                else:
+                    # Fallback to user-based search if no session_id
+                    vector_results = vector_service.search_documents_with_user_filter(
+                        query_embeddings, 
+                        current_user.user_id,
+                        limit=10
+                    )
+                    logger.info(f"🔍 User-based vector search returned {len(vector_results)} results for user {current_user.user_id}")
+                    search_method = "user_vector_search"
                 
                 if vector_results:
-                    # Filter results based on chat creation time
-                    logger.info(f"🔍 About to check filtering condition: chat_creation_time = {chat_creation_time}")
-                    
-                    # Always apply filtering if chat_creation_time is provided
-                    if chat_creation_time is not None:
-                        filtered_results = []
-                        logger.info(f"🔍 Starting filtering with chat creation time: {chat_creation_time}")
-                        logger.info(f"🔍 Number of vector results to filter: {len(vector_results)}")
-                        
-                        # Get all documents from database for comparison
-                        from app.core.database import Document
-                        all_docs = {doc.document_id: doc for doc in db.query(Document).all()}
-                        logger.info(f"🔍 Found {len(all_docs)} documents in database")
-                        
-                        for result in vector_results:
-                            if "payload" in result:
-                                doc_id = result["payload"].get("document_id")
-                                if doc_id in all_docs:
-                                    doc = all_docs[doc_id]
-                                    if doc.upload_date > chat_creation_time:
-                                        filtered_results.append(result)
-                                        logger.info(f"🔍 Added filtered result: {doc.filename}")
-                                    else:
-                                        logger.info(f"🔍 Skipped old document: {doc.filename} (uploaded {doc.upload_date})")
-                        
-                        search_results = filtered_results
-                        search_method = "qdrant_filtered"
-                        logger.info(f"🔍 After filtering: {len(search_results)} results")
-                    else:
-                        search_results = vector_results
-                        search_method = "qdrant"
+                    search_results = vector_results
+                    logger.info(f"✅ Vector search successful: {len(search_results)} results")
                 else:
-                    logger.info("🔍 No vector search results found")
-                    
+                    logger.warning("❌ Vector search returned no results")
             except Exception as e:
-                logger.warning(f"Vector search failed: {str(e)}")
+                logger.error(f"❌ Vector search failed: {str(e)}")
         
-        # If no vector results, try fallback search
+        # Fallback to full-text search if vector search failed or returned no results
         if not search_results:
-            logger.info("🔍 No vector results, trying fallback search")
-            search_results = await _fallback_search(question, db, chat_creation_time)
-            if search_results:
-                search_method = "fallback"
-                logger.info(f"🔍 Fallback search returned {len(search_results)} results")
+            try:
+                logger.info("🔄 Falling back to full-text search")
+                
+                # Get documents for the user and session
+                if request.session_id:
+                    # Get documents for specific session
+                    all_documents = get_documents_by_session(db, current_user.user_id, request.session_id)
+                    logger.info(f"🔍 Found {len(all_documents)} documents for user {current_user.user_id}, session {request.session_id}")
+                    
+                    # If no session-specific documents, fall back to all user documents
+                    if not all_documents:
+                        logger.info("🔄 No session-specific documents found, falling back to all user documents")
+                        all_documents = get_all_documents(db, current_user.user_id)
+                        logger.info(f"🔍 Found {len(all_documents)} total documents for user {current_user.user_id}")
+                        search_method = "full_text_search_fallback"
+                    else:
+                        search_method = "session_full_text_search"
+                else:
+                    # Get all documents for the user (fallback)
+                    all_documents = get_all_documents(db, current_user.user_id)
+                    logger.info(f"🔍 Found {len(all_documents)} total documents for user {current_user.user_id}")
+                    search_method = "full_text_search"
+                
+                if all_documents:
+                    # Simple keyword matching
+                    question_lower = question.lower()
+                    relevant_docs = []
+                    
+                    for doc in all_documents:
+                        # Check if question keywords appear in document content
+                        doc_content_lower = doc.text_content.lower() if doc.text_content else ""
+                        question_words = question_lower.split()
+                        
+                        # Count matching words
+                        matches = sum(1 for word in question_words if len(word) > 3 and word in doc_content_lower)
+                        
+                        if matches > 0:
+                            relevance_score = matches / len(question_words)
+                            relevant_docs.append({
+                                'id': doc.id,
+                                'filename': doc.filename,
+                                'content': doc.text_content,
+                                'relevance_score': relevance_score,
+                                'metadata': {
+                                    'upload_date': doc.upload_date.isoformat(),
+                                    'user_id': doc.user_id,
+                                    'session_id': doc.session_id
+                                }
+                            })
+                    
+                    # Sort by relevance and take top results
+                    relevant_docs.sort(key=lambda x: x['relevance_score'], reverse=True)
+                    search_results = relevant_docs[:5]
+                    search_method = "session_full_text_search" if request.session_id else "full_text_search"
+                    logger.info(f"✅ Full-text search successful: {len(search_results)} results")
+                else:
+                    logger.warning("❌ No documents found for user")
+            except Exception as e:
+                logger.error(f"❌ Full-text search failed: {str(e)}")
         
-        # Build context from search results
-        context = _build_context(search_results)
+        # Prepare context from search results
+        context = ""
+        sources = []
+        documents_found = len(search_results)
         
-        # Check if we have any relevant context
-        has_relevant_context = len(search_results) > 0 and any(
-            result.get('score', 0) > 0.1 for result in search_results
+        if search_results:
+            logger.info(f"📄 Processing {len(search_results)} search results")
+            
+            for i, result in enumerate(search_results):
+                try:
+                    # Handle different result structures
+                    if 'payload' in result:
+                        # Vector search result structure
+                        payload = result.get('payload', {})
+                        filename = payload.get('filename', f'Document {i+1}')
+                        content = payload.get('text', '')
+                        relevance = result.get('score', 'Unknown')
+                    else:
+                        # Full-text search result structure
+                        filename = result.get('filename', f'Document {i+1}')
+                        content = result.get('content', '')
+                        relevance = result.get('relevance_score', 'Unknown')
+                    
+                    # Add to context
+                    context += f"\n--- Document {i+1}: {filename} ---\n"
+                    context += f"Relevance: {relevance}\n"
+                    context += f"Content:\n{content}\n"
+                    
+                    # Add to sources
+                    sources.append({
+                        "filename": filename,
+                        "relevance": str(relevance)
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error processing search result {i}: {str(e)}")
+                    continue
+        
+        # Generate AI response
+        logger.info("🤖 Generating AI response")
+        web_search_results = None
+        
+        # Check if we need web search
+        if request.use_web_search and (not context or len(context.strip()) < 100):
+            logger.info("🌐 Context insufficient, performing web search")
+            try:
+                web_search_results = await multi_agent_service.search_web(question)
+                if web_search_results:
+                    logger.info("✅ Web search successful")
+                else:
+                    logger.warning("❌ Web search returned no results")
+            except Exception as e:
+                logger.error(f"❌ Web search failed: {str(e)}")
+        
+        # Generate response using the simplified AI service
+        ai_response = await multi_agent_service.generate_response(
+            question=question,
+            context=context,
+            web_search_results=web_search_results
         )
         
-        # If no relevant context and web search is enabled, use web search directly
-        if not has_relevant_context and request.use_web_search:
-            logger.info("🔍 No relevant document context found, using web search directly")
-            search_method = "web_search_only"
-            context = "No relevant documents found. Using web search for information."
-        elif not has_relevant_context:
-            logger.warning("🔍 No relevant context found and web search is disabled")
-            raise HTTPException(
-                status_code=404, 
-                detail="No relevant documents found. Please upload documents or enable web search."
-            )
+        # Extract response data
+        answer = ai_response.get("answer", "I'm sorry, I couldn't generate a response.")
+        assistant_name = ai_response.get("assistant_name", "AI Assistant")
+        assistant_description = ai_response.get("assistant_description", "General purpose AI assistant")
+        model_used = ai_response.get("model_used", "Unknown")
+        web_search_used = ai_response.get("web_search_used", False)
+        fallback_used = ai_response.get("fallback_response", False)
         
-        # Determine domain for multi-agent system
-        domain = None
-        if request.domain:
-            try:
-                domain = AgentDomain(request.domain.lower())
-                logger.info(f"🔍 Using requested domain: {domain.value}")
-            except ValueError:
-                logger.warning(f"Invalid domain requested: {request.domain}, will auto-detect")
-                domain = None
-        
-        if domain is None:
-            domain = multi_agent_service.detect_domain(question, context)
-            logger.info(f"🔍 Auto-detected domain: {domain.value}")
-        
-        # Generate AI response using multi-agent system
-        try:
-            if request.use_web_search:
-                # Use multi-agent service with web search fallback
-                ai_result = await multi_agent_service.generate_response_with_web_search(question, context, domain)
-            else:
-                # Use multi-agent service without web search
-                ai_result = await multi_agent_service.generate_response(question, context, domain)
-            
-            ai_method = "multi-agent"
-            answer = ai_result["answer"]
-            web_search_used = ai_result.get("web_search_used", False)
-            model_used = ai_result.get("model_used", "unknown")
-            
-            # Update search method if web search was used
-            if web_search_used and ai_result.get("search_method") == "web_search_only":
-                search_method = "web_search_only"
-            
-            logger.info(f"🔍 Generated response using {domain.value} agent")
-            logger.info(f"🔍 Web search used: {web_search_used}")
-            logger.info(f"🔍 Search method: {search_method}")
-            
-        except Exception as e:
-            logger.warning(f"Multi-agent generation failed: {str(e)}")
-            # Fallback to original AI service
-            try:
-                answer = await ai_service.generate_response(question, context)
-                ai_method = "gemini"
-                web_search_used = False
-                model_used = "gemini-1.5-flash"
-            except Exception as e2:
-                logger.warning(f"Fallback AI generation failed: {str(e2)}")
-                answer = _create_fallback_response(search_results, question)
-                ai_method = "fallback"
-                web_search_used = False
-                model_used = "fallback"
-        
-        # Prepare sources
-        sources = []
-        for result in search_results:
-            if "payload" in result:
-                metadata = result["payload"]
-                sources.append({
-                    "filename": metadata.get("filename", "Unknown"),
-                    "relevance": f"{result.get('score', 0):.3f}"
-                })
-        
-        # Get domain information
-        domain_config = multi_agent_service.domain_configs[domain]
+        logger.info(f"✅ Response generated successfully")
+        logger.info(f"📊 Documents found: {documents_found}")
+        logger.info(f"🔍 Search method: {search_method}")
+        logger.info(f"🤖 AI method: {assistant_name}")
+        logger.info(f"🌐 Web search used: {web_search_used}")
+        logger.info(f"⚠️ Fallback used: {fallback_used}")
         
         return QueryResponse(
             answer=answer,
             sources=sources,
-            documents_found=len(search_results),
+            documents_found=documents_found,
             search_method=search_method,
-            ai_method=ai_method,
+            ai_method=assistant_name,
             embedding_method=embedding_method,
-            fallback_used=search_method == "fallback" or ai_method == "fallback",
-            domain=domain.value,
-            domain_name=domain_config["name"],
-            domain_description=domain_config["description"],
+            fallback_used=fallback_used,
+            assistant_name=assistant_name,
+            assistant_description=assistant_description,
             web_search_used=web_search_used,
             model_used=model_used
         )
@@ -232,101 +280,23 @@ async def query_documents(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Query failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Query processing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.get("/domains")
 async def get_available_domains():
-    """Get list of available domains and their descriptions"""
+    """Get available AI assistant information"""
     try:
-        domains = multi_agent_service.get_available_domains()
-        return {"domains": domains}
+        # Return simplified assistant information
+        return {
+            "assistants": [
+                {
+                    "id": "general",
+                    "name": "AI Assistant",
+                    "description": "General purpose AI assistant for document analysis and web search"
+                }
+            ]
+        }
     except Exception as e:
-        logger.error(f"Failed to get domains: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def _fallback_search(question: str, db: Session, chat_creation_time=None) -> List[Dict[str, Any]]:
-    """Fallback keyword-based search"""
-    try:
-        documents = get_all_documents(db)
-        if not documents:
-            return []
-        
-        # Filter documents by chat creation time if provided
-        if chat_creation_time:
-            documents = [doc for doc in documents if doc.upload_date > chat_creation_time]
-            logger.info(f"Filtered to {len(documents)} documents uploaded after chat creation")
-        
-        # Simple keyword matching
-        question_lower = question.lower()
-        keywords = [word for word in question_lower.split() if len(word) > 2]
-        
-        scored_docs = []
-        for doc in documents:
-            if not doc.text_content:
-                continue
-                
-            text_lower = doc.text_content.lower()
-            score = sum(text_lower.count(keyword) for keyword in keywords)
-            
-            if score > 0:
-                scored_docs.append({
-                    "score": score / len(keywords),
-                    "payload": {
-                        "text": doc.text_content,
-                        "filename": doc.filename,
-                        "document_id": doc.document_id
-                    }
-                })
-        
-        # Sort by score and return top results
-        scored_docs.sort(key=lambda x: x["score"], reverse=True)
-        return scored_docs[:3]
-        
-    except Exception as e:
-        logger.error(f"Fallback search failed: {str(e)}")
-        return []
-
-def _build_context(search_results: List[Dict[str, Any]]) -> str:
-    """Build context string from search results"""
-    context_parts = []
-    
-    for i, result in enumerate(search_results):
-        if "payload" in result:
-            payload = result["payload"]
-            text = payload.get("text", "")
-            filename = payload.get("filename", "Unknown")
-            score = result.get("score", 0)
-            
-            context_parts.append(
-                f"[Document {i+1}: {filename}, Relevance: {score:.3f}]\n{text}"
-            )
-    
-    context = "\n\n".join(context_parts)
-    
-    # Limit context size
-    max_size = 30000
-    if len(context) > max_size:
-        context = context[:max_size] + "\n\n[Content truncated due to size limits...]"
-    
-    return context
-
-def _create_fallback_response(search_results: List[Dict[str, Any]], question: str) -> str:
-    """Create fallback response when AI is unavailable"""
-    response_parts = [f"I found {len(search_results)} relevant document(s), but I'm having trouble processing them with AI right now. Here's what I found:\n"]
-    
-    for i, result in enumerate(search_results):
-        if "payload" in result:
-            payload = result["payload"]
-            filename = payload.get("filename", "Unknown")
-            text = payload.get("text", "")
-            score = result.get("score", 0)
-            
-            preview = text[:500] + "..." if len(text) > 500 else text
-            response_parts.append(
-                f"{i+1}. {filename} (relevance: {score:.3f})\nContent Preview: {preview}\n"
-            )
-    
-    response_parts.append("\nNote: The AI service is temporarily unavailable. Please try again in a few minutes for a more detailed analysis.")
-    
-    return "\n".join(response_parts) 
+        logger.error(f"Failed to get assistant information: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get assistant information") 

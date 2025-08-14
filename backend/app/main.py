@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import documents, chat, query, messages
+from app.api.routes import documents, chat, query, messages, auth
 from app.core.config import settings
 from app.core.database import engine, Base
 
@@ -29,6 +29,7 @@ app.include_router(documents.router, prefix="/api/documents", tags=["documents"]
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(query.router, prefix="/api/query", tags=["query"])
 app.include_router(messages.router, prefix="/api/messages", tags=["messages"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 
 @app.get("/")
 async def root():

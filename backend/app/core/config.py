@@ -1,10 +1,12 @@
 import os
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class Settings(BaseSettings):
+    # Allow extra env vars to exist without raising validation errors
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "payalpatel")
@@ -24,17 +26,9 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     
-    # AI Models - Multiple models for different domains
+    # AI Models - Single model for all functionality
     EMBEDDING_MODEL: str = "embedding-001"
     GENERATION_MODEL: str = "gemini-1.5-flash"
-    
-    # Domain-specific models
-    HEALTH_MODEL: str = "gemini-1.5-flash"  # Can be different model for health
-    AGRICULTURE_MODEL: str = "gemini-1.5-flash"  # Can be different model for agriculture
-    LEGAL_MODEL: str = "gemini-1.5-flash"  # Can be different model for legal
-    FINANCE_MODEL: str = "gemini-1.5-flash"  # Can be different model for finance
-    EDUCATION_MODEL: str = "gemini-1.5-flash"  # Can be different model for education
-    GENERAL_MODEL: str = "gemini-1.5-flash"  # General purpose model
     
     # MCP Server Configuration
     MCP_SERVER_ENABLED: bool = os.getenv("MCP_SERVER_ENABLED", "true").lower() == "true"
@@ -48,7 +42,17 @@ class Settings(BaseSettings):
     # CORS / Frontend origins (comma-separated). Example: "http://localhost:3000,https://your-app.vercel.app"
     ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
     
-    class Config:
-        env_file = ".env"
+    # Auth / OAuth
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    OAUTH_REDIRECT_URI: str = os.getenv(
+        "OAUTH_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"
+    )
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-secret-change-me")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    
+    # Note: we load the .env file explicitly via load_dotenv() at module import.
+    # We intentionally do not define an inner Config to avoid conflicts with model_config.
 
 settings = Settings() 

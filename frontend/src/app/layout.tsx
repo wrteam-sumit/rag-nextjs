@@ -28,6 +28,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/*
+          Auth-aware apps would typically include a provider here. For now,
+          we rely on server-set cookies and simple fetches.
+        */}
         {children}
       </body>
     </html>

@@ -8,13 +8,14 @@ export async function GET(request: NextRequest) {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        cookie: request.headers.get("cookie") || "",
       },
     });
 
     if (!response.ok) {
       const error = await response.json();
       return NextResponse.json(
-        { error: error.detail || "Failed to fetch domains" },
+        { error: error.detail || "Failed to fetch assistants" },
         { status: response.status }
       );
     }
@@ -22,9 +23,9 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Error fetching domains:", error);
+    console.error("Error fetching assistants:", error);
     return NextResponse.json(
-      { error: "Failed to fetch domains" },
+      { error: "Failed to fetch assistants" },
       { status: 500 }
     );
   }

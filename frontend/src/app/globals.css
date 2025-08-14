@@ -100,6 +100,27 @@ textarea {
   overflow-y: hidden;
 }
 
+/* Better text wrapping for long content */
+.break-words {
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Handle long URLs and links */
+a,
+.url-text {
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+/* Ensure content doesn't overflow containers */
+.content-wrapper {
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
 /* Loading dots animation */
 .loading-dots {
   display: inline-block;

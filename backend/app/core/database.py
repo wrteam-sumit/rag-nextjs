@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, JSON, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.sql import func
@@ -28,6 +28,22 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, unique=True, index=True)  # stable external id (e.g., google sub)
+    email = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String)
+    avatar_url = Column(String)
+    provider = Column(String, nullable=False)  # e.g., 'google'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
+    chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
+
 class Document(Base):
     __tablename__ = "documents"
     
@@ -40,6 +56,11 @@ class Document(Base):
     text_length = Column(Integer)
     upload_date = Column(DateTime(timezone=True), server_default=func.now())
     metadata_json = Column(JSON)
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False)
+    session_id = Column(String, ForeignKey("chat_sessions.session_id"), nullable=True)  # NEW: Associate with chat session
+    
+    # Relationships
+    user = relationship("User", back_populates="documents")
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
@@ -49,9 +70,11 @@ class ChatSession(Base):
     title = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False)
     
     # Relationships
-    messages = relationship("Message", back_populates="session")
+    user = relationship("User", back_populates="chat_sessions")
+    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan")
 
 class Message(Base):
     __tablename__ = "messages"
@@ -64,6 +87,7 @@ class Message(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     sources = Column(JSON)
     metadata_json = Column(JSON)
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False)
     
     # Relationships
     session = relationship("ChatSession", back_populates="messages")

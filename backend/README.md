@@ -107,6 +107,14 @@ GOOGLE_API_KEY=your_google_api_key
 # Qdrant (optional)
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=
+
+# Auth (Google OAuth and JWT)
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+OAUTH_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+FRONTEND_URL=http://localhost:3000
+JWT_SECRET=replace_with_strong_secret
+JWT_ALGORITHM=HS256
 ```
 
 ## 📚 API Endpoints
@@ -115,6 +123,10 @@ QDRANT_API_KEY=
 - `GET /api/documents/` - List all documents
 - `POST /api/query/` - Query documents with RAG
 - `GET /api/chat/` - Chat session management
+- `GET /api/auth/google/login` - Get Google OAuth URL
+- `GET /api/auth/google/callback` - OAuth callback (sets cookie and redirects)
+- `GET /api/auth/me` - Current user info
+- `POST /api/auth/logout` - Clear auth cookie
 
 ## 🔍 PDF Processing Methods
 
