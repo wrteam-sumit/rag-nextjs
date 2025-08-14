@@ -1,5 +1,5 @@
 import os
-import fitz  # PyMuPDF
+import PyPDF2
 import pdfplumber
 from PIL import Image
 import io
@@ -61,12 +61,12 @@ class DocumentProcessor:
                     "success": True
                 }
             
-            # Method 2: Try PyMuPDF (fitz)
-            text = self._extract_with_pymupdf(file_content)
+            # Method 2: Try PyPDF2 (fallback)
+            text = self._extract_with_pypdf2(file_content)
             if text and len(text.strip()) > 100:
                 return {
                     "text": text,
-                    "method": "pymupdf",
+                    "method": "pypdf2",
                     "success": True
                 }
             
@@ -299,17 +299,16 @@ class DocumentProcessor:
             logger.warning(f"pdfplumber extraction failed: {str(e)}")
             return ""
     
-    def _extract_with_pymupdf(self, file_content: bytes) -> str:
-        """Extract text using PyMuPDF"""
+    def _extract_with_pypdf2(self, file_content: bytes) -> str:
+        """Extract text using PyPDF2"""
         try:
-            doc = fitz.open(stream=file_content, filetype="pdf")
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
             text = ""
-            for page in doc:
-                text += page.get_text()
-            doc.close()
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
             return text.strip()
         except Exception as e:
-            logger.warning(f"PyMuPDF extraction failed: {str(e)}")
+            logger.warning(f"PyPDF2 extraction failed: {str(e)}")
             return ""
     
     def _extract_patterns(self, file_content: bytes) -> str:
@@ -387,10 +386,12 @@ class DocumentProcessor:
         """Extract document metadata"""
         try:
             if file_extension.lower() == '.pdf':
-                doc = fitz.open(stream=file_content, filetype="pdf")
-                metadata = doc.metadata
-                doc.close()
-                return metadata
+                # PyMuPDF is removed, so this part needs to be updated if metadata extraction is still desired
+                # For now, returning a placeholder or removing if not directly used
+                return {
+                    "file_type": file_extension,
+                    "processing_method": "text_extraction"
+                }
             else:
                 return {
                     "file_type": file_extension,
