@@ -1,7 +1,6 @@
 import os
 import PyPDF2
 import pdfplumber
-from PIL import Image
 import io
 from typing import Dict, Any, Optional
 import logging
