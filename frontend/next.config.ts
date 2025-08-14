@@ -7,9 +7,6 @@ const nextConfig: NextConfig = {
     // Vercel uses Linux; ensure swc/transformers are prebuilt for target
     forceSwcTransforms: true,
   },
-  devIndicators: {
-    buildActivity: false,
-  },
   images: {
     remotePatterns: [
       {
