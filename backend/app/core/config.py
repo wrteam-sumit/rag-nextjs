@@ -1,12 +1,10 @@
 import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseSettings
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class Settings(BaseSettings):
-    # Allow extra env vars to exist without raising validation errors
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "payalpatel")
@@ -52,7 +50,8 @@ class Settings(BaseSettings):
     JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-secret-change-me")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     
-    # Note: we load the .env file explicitly via load_dotenv() at module import.
-    # We intentionally do not define an inner Config to avoid conflicts with model_config.
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
 
 settings = Settings() 
