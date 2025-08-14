@@ -1,11 +1,11 @@
-# Core Framework - Using compatible versions
-fastapi==0.95.2
-uvicorn[standard]==0.22.0
+# Core Framework - Using very stable versions
+fastapi==0.88.0
+uvicorn[standard]==0.20.0
 python-multipart==0.0.6
 python-dotenv==1.0.0
 
 # Database
-sqlalchemy==2.0.0
+sqlalchemy==1.4.50
 psycopg2-binary==2.9.0
 
 # Document Processing - Minimal for deployment
@@ -20,10 +20,10 @@ google-generativeai==0.3.0
 # Vector Database - Updated for Python 3.13 compatibility
 qdrant-client==1.15.1
 
-# Utilities - Using compatible pydantic version
-pydantic==1.10.13
+# Utilities - Using very stable versions
+pydantic==1.10.2
 python-jose==3.3.0
-httpx==0.24.1
+httpx==0.23.3
 
 # Web Search & Content Extraction
 duckduckgo-search==4.1.1
